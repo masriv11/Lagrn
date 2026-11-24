@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>FUELWISE – Smart Routes. Lower Fuel Consumption.</title>
+<style>:root{--navy:#0b1f3a;--navy2:#13335c;--cy:#1fb6d4;--bg:#f2f5f9;--card:#fff;--tx:#17263c}
+@media(prefers-color-scheme:dark){:root{--bg:#0a1626;--card:#12263f;--tx:#e6edf6}}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;font-family:system-ui,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--tx);line-height:1.55}
+.wrap{max-width:1100px;margin:auto;padding:28px 16px}
+.nav{position:sticky;top:0;z-index:9;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:12px 20px;background:var(--navy);color:#fff}
+.nav a{color:#cfe9f2;margin-left:14px;text-decoration:none;font-size:.9rem}.nav a:hover{color:var(--cy)}
+.hero{background:linear-gradient(135deg,var(--navy),var(--navy2));color:#fff}
+.hero h1{font-size:2.8rem;margin:0}.tag{color:var(--cy);font-size:1.2rem}.small{font-size:.85rem;opacity:.8}
+.btn{display:inline-block;background:var(--cy);color:#04202a;border:0;padding:10px 20px;border-radius:8px;font-weight:600;cursor:pointer;text-decoration:none;transition:.2s}
+.btn:hover{transform:translateY(-2px);filter:brightness(1.1)}
+h2{border-left:4px solid var(--cy);padding-left:10px}
+.card{background:var(--card);border-radius:12px;padding:18px;margin:14px 0;box-shadow:0 2px 10px #0002}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.grid3 .card{margin:0}
+label{display:block;font-weight:600;font-size:.9rem}
+input,select{width:100%;padding:8px;margin-top:4px;border:1px solid #8aa;border-radius:6px;background:transparent;color:inherit;font:inherit}
+table{width:100%;border-collapse:collapse}th,td{padding:8px;text-align:left;border-bottom:1px solid #8883}
+th{background:var(--navy);color:#fff}.scroll{overflow-x:auto}
+.badges{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.badge{background:var(--navy2);color:#fff;border-radius:10px;padding:14px;border-top:3px solid var(--cy)}.badge b{display:block;font-size:1.3rem;color:var(--cy)}
+.warn{color:#c0392b;font-weight:600}.pos{color:#1e9e5a;font-weight:700}.neg{color:#c0392b;font-weight:700}
+.tagpill{background:var(--cy);color:#04202a;border-radius:10px;padding:1px 8px;font-size:.75rem;margin-right:4px;white-space:nowrap}
+code,pre{background:#8882;border-radius:6px;padding:2px 5px}pre{padding:12px;overflow-x:auto;font-size:.82rem}
+.flow{display:flex;flex-direction:column;align-items:center;gap:4px}
+.step{width:min(560px,100%);background:var(--card);border-left:4px solid var(--cy);padding:10px 14px;border-radius:8px}
+.arrow{color:var(--cy);font-size:1.3rem}.note{opacity:.85}.list{columns:2}
+.rm{background:#c0392b;color:#fff;border:0;border-radius:6px;cursor:pointer;padding:6px 10px}
+footer{text-align:center;padding:20px;background:var(--navy);color:#cfe9f2}
+@media(max-width:600px){.list{columns:1}.hero h1{font-size:2rem}}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head><body>
+<header class="nav"><b>⛽ FUELWISE</b>
+<span class="small" style="color:#cfe9f2">Smart Routes. Lower Fuel Consumption. Better Efficiency.</span></header>
+
+
+<section id="dashboard" class="wrap"><h2>Route Optimization Dashboard</h2>
+<div class="card"><table id="inputTbl"><thead><tr><th>Route name</th><th>Distance (km)</th><th>Fuel coefficient a (L/km²)</th><th></th></tr></thead><tbody></tbody></table>
+<button class="btn" id="addRoute">+ Add route</button> <button class="btn" id="splitEq">Split total equally</button></div>
+<div class="card grid2">
+<label>Fuel price (₹/L)<input id="price" type="number" min="0" step="any" value="100"></label>
+<label>Total distance to be travelled (km)<input id="total" type="number" min="0" step="any" value="300"></label></div>
+<div id="msg" class="warn"></div>
+<div class="card" id="totalDist"></div>
+<div class="card" id="fnCard"></div>
+<div class="card" id="optCard"></div>
+<div class="badges" id="badges"></div>
+<div class="card scroll"><table id="cmpTbl"></table></div>
+<div class="card"><h3>Fuel savings</h3><label>Baseline (your usual) route <select id="baseline"></select></label><div id="savings"></div></div>
+<div class="grid3"><div class="card"><canvas id="cDist"></canvas></div><div class="card"><canvas id="cFuel"></canvas></div><div class="card"><canvas id="cCost"></canvas></div></div>
+<div class="card"><canvas id="cSave" height="90"></canvas></div>
+<p class="note">Note: shortest and most fuel-efficient routes are computed independently; they differ when route fuel coefficients differ.</p>
+
+</section>
+
+
+
+
+
+<footer>FUELWISE · Developed by Binary Minds – Team 2</footer>
+<script>/* FUELWISE – route comparison + Lagrange multiplier demo. Pure JS, no backend. */
+
+/* ---------- Pure maths (also unit-tested in Node) ---------- */
+// Model fuel for one route: f = a * x^2 (a = fuel coefficient, x = distance); null if invalid
+function modelFuel(d, a){ return (d > 0 && a > 0 && isFinite(d) && isFinite(a)) ? a * d * d : null; }
+// Two-variable Lagrange solution: min a x^2 + b y^2 s.t. x + y = D
+function lagrange2(a, b, D){
+  const s = a + b;
+  return { x: b*D/s, y: a*D/s, lambda: -2*a*b*D/s, F: a*b*D*D/s };
+}
+// n-variable: x_i = D/(a_i * sum(1/a_j)), lambda = -2D/sum(1/a_j), Fmin = D^2/sum(1/a_j)
+function lagrangeN(c, D){
+  const S = c.reduce((t, v) => t + 1/v, 0);
+  return { xs: c.map(v => D/(v*S)), lambda: -2*D/S, F: D*D/S };
+}
+// Golden-section search: numerical check (plays the role of scipy.optimize.minimize_scalar)
+function goldenMin(f, lo, hi){
+  const g = (Math.sqrt(5) - 1)/2;
+  let c = hi - g*(hi - lo), d = lo + g*(hi - lo);
+  for (let i = 0; i < 200; i++){
+    if (f(c) < f(d)) hi = d; else lo = c;
+    c = hi - g*(hi - lo); d = lo + g*(hi - lo);
+  }
+  return (lo + hi)/2;
+}
+if (typeof module !== 'undefined') module.exports = { modelFuel, lagrange2, lagrangeN, goldenMin };
+
+/* ---------- UI ---------- */
+if (typeof document !== 'undefined'){
+const $ = id => document.getElementById(id);
+const fmt = (v, n = 2) => Number(v).toLocaleString('en-IN', { maximumFractionDigits: n });
+let routes = [{name:'Route A', dist:120, mil:0.002}, {name:'Route B', dist:100, mil:0.003}, {name:'Route C', dist:80, mil:0.004}];
+const charts = {};
+
+// Create or update a Chart.js chart so graphs follow the inputs
+function draw(id, type, labels, datasets, title, opts = {}){
+  if (typeof Chart === 'undefined') return;
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart($(id), { type, data:{labels, datasets},
+    options:{ responsive:true, plugins:{ title:{display:true, text:title} }, ...opts } });
+}
+
+function renderInputs(){
+  const tb = document.querySelector('#inputTbl tbody'); tb.innerHTML = '';
+  routes.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><input value="${r.name}"></td><td><input type="number" min="0" step="any" value="${r.dist}"></td><td><input type="number" min="0" step="any" value="${r.mil}"></td><td><button class="rm">✕</button></td>`;
+    const [n, d, m] = tr.querySelectorAll('input');
+    n.oninput = () => { r.name = n.value; compute(); };
+    d.oninput = () => { r.dist = d.value; compute(); };
+    m.oninput = () => { r.mil = m.value; compute(); };
+    tr.querySelector('.rm').onclick = () => { routes.splice(i, 1); renderInputs(); compute(); };
+    tb.appendChild(tr);
+  });
+}
+
+// Optimal distance for each route from its fuel coefficient (Lagrange: x_i = D / (a_i * sum(1/a_j)))
+function renderOpt(){
+  const D = +$('total').value, rs = routes.filter(r => +r.mil > 0), el = $('optCard');
+  const head = '<h3>Distance to Travel by Fuel Coefficient</h3>';
+  if (!rs.length || !(D > 0)){ el.innerHTML = head + '<p class="warn">Enter a total distance &gt; 0 and at least one fuel coefficient &gt; 0.</p>'; return; }
+  const o = lagrangeN(rs.map(r => +r.mil), D);
+  el.innerHTML = head + '<p>Distance each route should travel to minimise total fuel for the total distance, based on the coefficients entered.</p><div class="scroll"><table><tr><th>Route</th><th>Coefficient a</th><th>Distance (km)</th><th>Share</th><th>Fuel at this distance (L)</th></tr>' +
+    rs.map((r, i) => `<tr><td>${r.name}</td><td>${fmt(+r.mil, 6)}</td><td><b>${fmt(o.xs[i], 3)}</b></td><td>${fmt(o.xs[i] / D * 100, 1)}%</td><td>${fmt(+r.mil * o.xs[i] ** 2, 4)}</td></tr>`).join('') +
+    `<tr><th>Total</th><th></th><th>${fmt(D)}</th><th>100%</th><th>${fmt(o.F, 4)}</th></tr></table></div><p style="margin-top:12px"><button class="btn" id="applyOpt">Apply this split to the routes</button></p>`;
+  $('applyOpt').onclick = () => { // round to 2 decimals; last route absorbs the rounding remainder
+    let used = 0;
+    rs.forEach((r, i) => { r.dist = i < rs.length - 1 ? +o.xs[i].toFixed(2) : +(D - used).toFixed(2); used += +r.dist; });
+    renderInputs(); compute(); };
+}
+
+function compute(){
+  const price = +$('price').value;
+  const rows = routes.map((r, i) => {
+    const m = +r.mil, d = +r.dist, f = modelFuel(d, m);
+    return { i, name: r.name || 'Route ' + (i+1), d, m, f, cost: f === null ? null : f*price };
+  });
+  const ok = rows.filter(r => r.f !== null);
+  renderOpt();
+  $('msg').textContent = (ok.length < rows.length ? 'Some routes ignored: distance and coefficient must be > 0. ' : '') + (price < 0 || isNaN(price) ? 'Fuel price must be ≥ 0.' : '');
+  // baseline dropdown (preserve selection)
+  const prev = $('baseline').value;
+  $('baseline').innerHTML = ok.map(r => `<option value="${r.i}">${r.name}</option>`).join('');
+  if ([...$('baseline').options].some(o => o.value === prev)) $('baseline').value = prev;
+  if (!ok.length){ $('badges').innerHTML = $('cmpTbl').innerHTML = $('savings').innerHTML = $('totalDist').innerHTML = $('fnCard').innerHTML = ''; return; }
+  const by = k => ok.reduce((a, b) => b[k] < a[k] ? b : a);
+  const sh = by('d'), lf = by('f'), lc = by('cost');
+  const total = ok.reduce((t, r) => t + r.d, 0), lg = ok.reduce((x, y) => y.d > x.d ? y : x);
+  $('totalDist').innerHTML = (() => {
+    // Total distance D is split across the routes; show allocation status and totals
+    const D = +$('total').value, rem = D - total, tf = ok.reduce((t, r) => t + r.f, 0), tc = ok.reduce((t, r) => t + r.cost, 0);
+    const st = !(D >= 0) ? '<span class="warn">Enter a valid total distance.</span>' : Math.abs(rem) < 1e-9 ? '<span class="pos">Fully allocated ✓</span>' : rem > 0 ? `<span class="warn">${fmt(rem)} km still to be allocated</span>` : `<span class="neg">Over-allocated by ${fmt(-rem)} km</span>`;
+    return `<h3>Total Distance &amp; Split</h3><p>Total to travel: <b>${fmt(D)} km</b> · Allocated to routes: <b>${fmt(total)} km</b> · ${st}</p><p>Fuel for the split: <b>${fmt(tf)} L</b> · Cost: <b>₹${fmt(tc)}</b></p>`;
+  })();
+  $('fnCard').innerHTML = fnView(ok);
+  $('badges').innerHTML =
+    `<div class="badge">Shortest distance<b>${sh.name}</b>${fmt(sh.d)} km</div>
+     <div class="badge">Lowest fuel consumption<b>${lf.name}</b>${fmt(lf.f)} L</div>
+     <div class="badge">Lowest cost<b>${lc.name}</b>₹${fmt(lc.cost)}</div>`;
+  $('cmpTbl').innerHTML = '<tr><th>Route</th><th>Distance (km)</th><th>Share of total</th><th>Δ vs shortest</th><th>Efficiency (km/L)</th><th>Fuel (L)</th><th>Cost (₹)</th><th>Tags</th></tr>' +
+    ok.map(r => `<tr><td>${r.name}</td><td>${fmt(r.d)}</td><td>${fmt(r.d / total * 100, 1)}%</td><td>+${fmt(r.d - sh.d)}</td><td>${fmt(r.d / r.f)}</td><td>${fmt(r.f)}</td><td>${fmt(r.cost)}</td><td>${r === sh ? '<span class="tagpill">Shortest</span>' : ''}${r === lf ? '<span class="tagpill">Min fuel</span>' : ''}${r === lc ? '<span class="tagpill">Min cost</span>' : ''}</td></tr>`).join('');
+  savings(ok, lf);
+  const L = ok.map(r => r.name);
+  draw('cDist', 'bar', L, [{label:'Distance (km)', data:ok.map(r => r.d), backgroundColor:'#1fb6d4'}], 'Distance comparison');
+  draw('cFuel', 'bar', L, [{label:'Fuel (L)', data:ok.map(r => r.f), backgroundColor:'#13335c'}], 'Fuel consumption');
+  draw('cCost', 'bar', L, [{label:'Cost (₹)', data:ok.map(r => r.cost), backgroundColor:'#3a7bd5'}], 'Fuel cost');
+}
+
+
+// Show the fuel-optimization function F = sum(a_i x_i^2) s.t. sum(x_i) = D with the numbers substituted
+function fnView(ok){
+  const D = +$('total').value, vn = i => i < 3 ? 'xyz'[i] : 'x' + (i + 1), sq = s => s + '²';
+  const vars = ok.map((r, i) => vn(i)), cf = v => fmt(v, 6);
+  const F = vars.map((v, i) => `${cf(ok[i].m)}${sq(v)}`).join(' + ');
+  const terms = ok.map((r, i) => `${cf(r.m)} × ${fmt(r.d)}² = ${fmt(r.f, 4)}`).join(' &nbsp;+&nbsp; ');
+  const cur = ok.reduce((t, r) => t + r.f, 0), alloc = ok.reduce((t, r) => t + r.d, 0);
+  let h = `<h3>Fuel Optimization Function</h3>
+   <p>Variables: ${ok.map((r, i) => `<code>${vars[i]}</code> = ${r.name}`).join(', ')}; <code>D</code> = total distance.</p>
+   <p><b>Objective:</b> <code>F(${vars.join(', ')}) = ${F}</code></p>
+   <p><b>Constraint:</b> <code>${vars.join(' + ')} = D = ${fmt(D)} km</code></p>
+   <p><b>Your current split:</b> ${terms}<br>→ <b>F = ${fmt(cur, 4)} L</b></p>
+   <p><b>Lagrangian:</b> <code>L = F + λ(${vars.join(' + ')} − D)</code>; setting <code>∂L/∂${vars[0]} = 2·${cf(ok[0].m)}·${vars[0]} + λ = 0</code> (and likewise for each variable) gives <code>a₁x₁ = a₂x₂ = … = −λ/2</code>.</p>`;
+  if (!(D > 0)) return h + '<p class="warn">Enter a total distance &gt; 0 to see the optimal split.</p>';
+  const o = lagrangeN(ok.map(r => r.m), D);
+  h += `<p><b>Optimal split (Lagrange):</b> ${ok.map((r, i) => `${vars[i]} = ${fmt(o.xs[i], 3)} km`).join(', ')}<br>λ = ${fmt(o.lambda, 4)} · <b>F<sub>min</sub> = ${fmt(o.F, 4)} L</b></p>`;
+  if (Math.abs(alloc - D) < 1e-9){
+    const ex = cur - o.F, p = cur > 0 ? ex / cur * 100 : 0;
+    h += `<p>Your split uses <b class="${ex > 1e-9 ? 'neg' : 'pos'}">${fmt(ex, 4)} L</b> (${fmt(p, 2)}%) more than the optimum.</p>`;
+  } else h += '<p class="warn">Allocate the full total distance to compare your split with the optimum.</p>';
+  return h;
+}
+
+// Savings: baseline vs recommended (lowest-fuel) route; negative values are shown as such
+function savings(ok, rec){
+  const b = ok.find(r => r.i == $('baseline').value) || ok[0];
+  const sv = b.f - rec.f, cs = b.cost - rec.cost, pct = b.f > 0 ? sv/b.f*100 : 0;
+  const cl = sv < 0 ? 'neg' : 'pos';
+  $('savings').innerHTML = `<p>Existing: <b>${b.name}</b> (${fmt(b.d)} km) → Recommended: <b>${rec.name}</b> (${fmt(rec.d)} km)</p>
+   <p>Fuel saved: <span class="${cl}">${fmt(sv)} L</span> · Money saved: <span class="${cl}">₹${fmt(cs)}</span> · Reduction: <span class="${cl}">${fmt(pct)}%</span></p>` +
+   (sv < 0 ? '<p class="warn">Recommended route uses more fuel than the baseline.</p>' : '');
+  draw('cSave', 'bar', ok.map(r => r.name), [{label:'Fuel saved vs baseline (L)', data:ok.map(r => b.f - r.f), backgroundColor:ok.map(r => b.f - r.f >= 0 ? '#1e9e5a' : '#c0392b')}], 'Fuel savings relative to ' + b.name);
+}
+
+['price','total'].forEach(id => $(id).oninput = compute);
+$('baseline').onchange = compute;
+$('splitEq').onclick = () => { // divide D equally across all routes (last route takes rounding remainder)
+  const D = +$('total').value, n = routes.length; if (!(D > 0) || !n) return;
+  const each = Math.floor(D / n * 100) / 100;
+  routes.forEach((r, i) => r.dist = i < n - 1 ? each : +(D - each * (n - 1)).toFixed(2));
+  renderInputs(); compute(); };
+$('addRoute').onclick = () => { const rem = (+$('total').value) - routes.reduce((t, r) => t + (+r.dist || 0), 0);
+  routes.push({name:'Route ' + String.fromCharCode(65 + routes.length % 26), dist: rem > 0 ? +rem.toFixed(2) : '', mil:0.003}); renderInputs(); compute(); };
+renderInputs(); compute();
+}
+</script></body></html>
